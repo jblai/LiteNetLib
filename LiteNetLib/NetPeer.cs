@@ -41,7 +41,7 @@ namespace LiteNetLib
     /// <summary>
     /// Network peer. Main purpose is sending messages to specific peer.
     /// </summary>
-    public sealed class NetPeer
+    public class NetPeer
     {
         //Ping and RTT
         private int _rtt;
@@ -82,7 +82,6 @@ namespace LiteNetLib
         private readonly BaseChannel[] _channels;
         private BaseChannel _headChannel;
         private readonly byte _channelsCount;
-        private readonly int _channelsTotalCount;
 
         //MTU
         private int _mtu = NetConstants.PossibleMtu[0];
@@ -183,8 +182,8 @@ namespace LiteNetLib
         internal double ResendDelay { get { return _resendDelay; } }
 
         /// <summary>
-		/// Application defined object containing data about the connection
-		/// </summary>
+        /// Application defined object containing data about the connection
+        /// </summary>
         public object Tag;
 
         /// <summary>
@@ -210,8 +209,7 @@ namespace LiteNetLib
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
             
             _channelsCount = netManager.ChannelsCount;
-            _channelsTotalCount = (byte)(_channelsCount * 4);
-            _channels = new BaseChannel[_channelsTotalCount];
+            _channels = new BaseChannel[_channelsCount * 4];
         }
 
         private BaseChannel CreateChannel(byte idx)
@@ -400,7 +398,7 @@ namespace LiteNetLib
             if (_connectionState == ConnectionState.ShutdownRequested ||
                 _connectionState == ConnectionState.Disconnected)
                 return;
-            if (channelNumber >= _channelsTotalCount)
+            if (channelNumber >= _channels.Length)
                 return;
 
             //Select channel
@@ -833,24 +831,18 @@ namespace LiteNetLib
                     break;
 
                 case PacketProperty.Ack:
-                    if (packet.ChannelId > _channelsTotalCount)
-                    {
-                        _packetPool.Recycle(packet);
-                        break;
-                    }
-                    BaseChannel channel = _channels[packet.ChannelId];
-                    if (channel != null)
-                        channel.ProcessPacket(packet);
-                    break;
-
                 case PacketProperty.Channeled:
-                    if (packet.ChannelId > _channelsTotalCount)
+                    if (packet.ChannelId > _channels.Length)
                     {
                         _packetPool.Recycle(packet);
                         break;
                     }
-                    channel = _channels[packet.ChannelId] ?? CreateChannel(packet.ChannelId);
-                    channel.ProcessPacket(packet);
+                    var channel = _channels[packet.ChannelId] ?? (packet.Property == PacketProperty.Ack ? null : CreateChannel(packet.ChannelId));
+                    if (channel != null)
+                    {
+                        if (!channel.ProcessPacket(packet))
+                            _packetPool.Recycle(packet);
+                    }
                     break;
 
                 //Simple packet without acks

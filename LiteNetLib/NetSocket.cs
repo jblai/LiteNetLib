@@ -26,6 +26,7 @@ namespace LiteNetLib
         private Thread _threadv6;
         private volatile bool _running;
         private readonly INetSocketListener _listener;
+        private const int SioUdpConnreset = -1744830452; //SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12
         private static readonly IPAddress MulticastAddressV6 = IPAddress.Parse("FF02:0:0:0:0:0:0:1");
         internal static readonly bool IPv6Support;
 
@@ -163,6 +164,15 @@ namespace LiteNetLib
             socket.SendBufferSize = NetConstants.SocketBufferSize;
             try
             {
+                socket.IOControl(SioUdpConnreset, new byte[] {0}, null);
+            }
+            catch
+            {
+                //ignored
+            }
+
+            try
+            {
                 socket.ExclusiveAddressUse = !reuseAddress;
                 socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, reuseAddress);
             }
@@ -229,7 +239,7 @@ namespace LiteNetLib
 
         public bool SendBroadcast(byte[] data, int offset, int size, int port)
         {
-            bool broadcastSuccess;
+            bool broadcastSuccess = false;
             bool multicastSuccess = false;
             try
             {
@@ -240,7 +250,7 @@ namespace LiteNetLib
                              SocketFlags.None,
                              new IPEndPoint(IPAddress.Broadcast, port)) > 0;
            
-                if (IPv6Support)
+                if (_udpSocketv6 != null)
                 {
                     multicastSuccess = _udpSocketv6.SendTo(
                                                 data,
@@ -253,7 +263,7 @@ namespace LiteNetLib
             catch (Exception ex)
             {
                 NetDebug.WriteError("[S][MCAST]" + ex);
-                return false;
+                return broadcastSuccess;
             }
             return broadcastSuccess || multicastSuccess;
         }
